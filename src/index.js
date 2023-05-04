@@ -1,7 +1,8 @@
-import Notiflix from 'notiflix';
-import axios from 'axios';
 import SimpleLightbox from 'simplelightbox';
 import 'simplelightbox/dist/simple-lightbox.min.css';
+import Notiflix from 'notiflix';
+import { getImages, totalPages } from './js/tobackend';
+import { makeGallery, scroll } from './js/makehtml';
 
 const lightbox = new SimpleLightbox('.gallery a');
 
@@ -9,28 +10,8 @@ const form = document.querySelector('#search-form');
 const gallery = document.querySelector('.gallery');
 const guard = document.querySelector('.guard');
 
-const images_per_page = 40;
-let totalPages = 0;
-
-async function getImages(query, page) {
-  const API_KEY = '35956293-5694f9bae7d2551c230f60579';
-  const params = new URLSearchParams({
-    key: API_KEY,
-    q: query,
-    image_type: 'photo',
-    orientation: 'horizontal',
-    safesearch: true,
-    per_page: images_per_page,
-    page: page,
-  });
-
-  const response = await axios.get(`https://pixabay.com/api/?${params}`);
-  totalPages = response.data.totalHits / images_per_page;
-  return response;
-}
-
 let query = '';
-let page = 1;
+let cur_page = 1;
 
 const options = {
   root: null,
@@ -49,21 +30,22 @@ function onInput(evt) {
 
 function onSubmit(evt) {
   evt.preventDefault();
-  page = 1;
   gallery.innerHTML = '';
+  observer.unobserve(guard);
 
   if (!evt.target.elements.searchQuery.value) {
     Notiflix.Notify.failure('Please, enter a search query');
   } else {
+    cur_page = 1;
     createGallery();
   }
 }
 
 async function createGallery() {
   try {
-    const response = await getImages(query, page);
+    const response = await getImages(query, cur_page);
     addImages(response);
-    if (page !== totalPages) {
+    if (cur_page !== totalPages) {
       observer.observe(guard);
     }
   } catch (error) {
@@ -88,39 +70,12 @@ function addImages(response) {
   }
 }
 
-function makeGallery(images) {
-  const markup = images
-    .map(image => {
-      const {
-        webformatURL,
-        largeImageURL,
-        tags,
-        likes,
-        views,
-        comments,
-        downloads,
-      } = image;
-      return `<a class="gallery__item" target="_self" href="${largeImageURL}">
-              <div class="img-container">
-                  <img class="gallery__image" src="${webformatURL}" alt="${tags}" loading="lazy"/>
-              </div>
-              <div class="info">
-                  <p class="info-item"><b>Likes</b> <br>${likes}</p>
-                  <p class="info-item"><b>Views</b> <br>${views}</p>
-                  <p class="info-item"><b>Comments</b> <br>${comments}</p>
-                  <p class="info-item"><b>Downloads</b> <br>${downloads}</p>
-              </div></a>`;
-    })
-    .join('');
-  gallery.insertAdjacentHTML('beforeend', markup);
-}
-
 function onPagination(entries, observer) {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
-      page += 1;
+      cur_page += 1;
       paginationGallery();
-      if (page === totalPages) {
+      if (cur_page === totalPages) {
         observer.unobserve(guard);
       }
     }
@@ -130,12 +85,11 @@ function onPagination(entries, observer) {
 async function paginationGallery() {
   try {
     scroll();
-    const response = await getImages(query, page);
+    const response = await getImages(query, cur_page);
     const images = response.data.hits;
     makeGallery(images);
     lightbox.refresh();
-
-    if (page > totalPages) {
+    if (cur_page > totalPages) {
       Notiflix.Notify.warning(
         "We're sorry, but you've reached the end of search results."
       );
@@ -145,16 +99,4 @@ async function paginationGallery() {
   }
 }
 
-function scroll() {
-  if (!gallery.firstElementChild) {
-    return;
-  } else {
-    const { height: cardHeight } =
-      gallery.firstElementChild.getBoundingClientRect();
-
-    window.scrollBy({
-      top: cardHeight * 2,
-      behavior: 'smooth',
-    });
-  }
-}
+export { gallery };
